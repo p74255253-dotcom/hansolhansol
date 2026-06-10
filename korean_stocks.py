@@ -124,7 +124,7 @@ fig.update_layout(
     legend=dict(orientation="h", y=-0.2),
     height=450, margin=dict(t=20)
 )
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")
 
 # ── 정규화 수익률 비교 ────────────────────────────────────
 st.subheader("📐 수익률 비교 (기간 시작 = 100)")
@@ -146,7 +146,7 @@ fig2.update_layout(
     legend=dict(orientation="h", y=-0.2),
     height=400, margin=dict(t=20)
 )
-st.plotly_chart(fig2, use_container_width=True)
+st.plotly_chart(fig2, width="stretch")
 
 # ── 거래량 바 차트 ───────────────────────────────────────
 st.subheader("📦 최근 20일 평균 거래량")
@@ -163,7 +163,7 @@ fig3 = px.bar(
     color_continuous_scale="Blues", text_auto=".3s"
 )
 fig3.update_layout(showlegend=False, height=350, margin=dict(t=20), coloraxis_showscale=False)
-st.plotly_chart(fig3, use_container_width=True)
+st.plotly_chart(fig3, width="stretch")
 
 # ── 상세 데이터 테이블 ────────────────────────────────────
 st.subheader("📋 종목별 상세 정보")
@@ -194,7 +194,7 @@ for name, df in data.items():
         "시가총액":       mkt_cap_str,
     })
 
-st.dataframe(pd.DataFrame(rows).set_index("종목"), use_container_width=True)
+st.dataframe(pd.DataFrame(rows).set_index("종목"), width="stretch")
 
 # ── 캔들스틱 (단일 종목) ──────────────────────────────────
 st.subheader("🕯️ 캔들스틱 차트")
@@ -217,6 +217,6 @@ fig4.update_layout(
     xaxis_title="날짜", yaxis_title="가격 (원)",
     height=500, margin=dict(t=20)
 )
-st.plotly_chart(fig4, use_container_width=True)
+st.plotly_chart(fig4, width="stretch")
 
 st.caption("※ 본 대시보드는 투자 권유가 아닙니다. 투자 판단은 본인 책임하에 하시기 바랍니다.")
