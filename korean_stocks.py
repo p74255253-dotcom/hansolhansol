@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 from datetime import datetime
+from openai import OpenAI
 
 st.set_page_config(
     page_title="국내 주식 대시보드",
@@ -33,6 +34,15 @@ def get_series(df, col):
 
 # ── 사이드바 ─────────────────────────────────────────────
 st.sidebar.title("⚙️ 설정")
+
+st.sidebar.divider()
+st.sidebar.subheader("🤖 AI 챗봇 설정")
+openai_api_key = st.sidebar.text_input(
+    "OpenAI API Key",
+    type="password",
+    placeholder="sk-...",
+    help="gpt-4o-mini 모델을 사용합니다."
+)
 
 period_map = {"1개월": "1mo", "3개월": "3mo", "6개월": "6mo", "1년": "1y", "2년": "2y"}
 selected_period_label = st.sidebar.selectbox("조회 기간", list(period_map.keys()), index=2)
@@ -218,5 +228,98 @@ fig4.update_layout(
     height=500, margin=dict(t=20)
 )
 st.plotly_chart(fig4, width="stretch")
+
+st.divider()
+
+# ── AI 챗봇 ──────────────────────────────────────────────
+st.subheader("🤖 AI 주식 분석 챗봇")
+st.caption("현재 로드된 주식 데이터를 기반으로 질문하세요.")
+
+if not openai_api_key:
+    st.info("왼쪽 사이드바에 OpenAI API Key를 입력하면 챗봇을 사용할 수 있습니다.")
+else:
+    # 주식 데이터 요약 컨텍스트 생성
+    def build_stock_context(data: dict, infos: dict, period_label: str) -> str:
+        lines = [f"[조회 기간: {period_label}]", ""]
+        for name, df in data.items():
+            close = get_series(df, "Close")
+            high  = get_series(df, "High")
+            low   = get_series(df, "Low")
+            vol   = get_series(df, "Volume")
+
+            latest     = float(close.iloc[-1])
+            prev       = float(close.iloc[-2]) if len(close) > 1 else latest
+            pct_change = (latest / float(close.iloc[0]) - 1) * 100
+            day_pct    = (latest - prev) / prev * 100 if prev else 0
+            period_high = float(high.max())
+            period_low  = float(low.min())
+            avg_vol    = float(vol.tail(20).mean())
+
+            mkt_cap = infos.get(name, {}).get("marketCap", None)
+            mkt_cap_str = f"{mkt_cap/1e12:.2f}조원" if mkt_cap else "정보없음"
+
+            lines.append(f"▪ {name}")
+            lines.append(f"  현재가: {latest:,.0f}원 | 전일대비: {day_pct:+.2f}%")
+            lines.append(f"  기간수익률: {pct_change:+.2f}% | 기간최고: {period_high:,.0f}원 | 기간최저: {period_low:,.0f}원")
+            lines.append(f"  20일평균거래량: {avg_vol:,.0f} | 시가총액: {mkt_cap_str}")
+            lines.append("")
+        return "\n".join(lines)
+
+    SYSTEM_PROMPT = """당신은 국내 주식 전문 AI 애널리스트입니다.
+사용자가 제공한 주식 데이터를 기반으로 분석하고 답변합니다.
+답변은 한국어로, 명확하고 간결하게 작성하세요.
+투자 권유는 하지 않으며, 데이터 기반의 객관적 분석을 제공합니다."""
+
+    stock_context = build_stock_context(data, infos, selected_period_label)
+
+    # 대화 히스토리 초기화
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
+
+    # 대화 초기화 버튼
+    if st.button("대화 초기화", use_container_width=False):
+        st.session_state.messages = []
+        st.rerun()
+
+    # 이전 대화 출력
+    for msg in st.session_state.messages:
+        with st.chat_message(msg["role"]):
+            st.markdown(msg["content"])
+
+    # 입력창
+    if prompt := st.chat_input("주식에 대해 질문하세요. 예) 삼성전자 최근 수익률은?"):
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        with st.chat_message("assistant"):
+            with st.spinner("분석 중..."):
+                try:
+                    client = OpenAI(api_key=openai_api_key)
+
+                    messages_to_send = [
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "system", "content": f"현재 로드된 주식 데이터:\n{stock_context}"},
+                    ] + [
+                        {"role": m["role"], "content": m["content"]}
+                        for m in st.session_state.messages
+                    ]
+
+                    response = client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=messages_to_send,
+                        temperature=0.7,
+                        max_tokens=1000,
+                    )
+                    answer = response.choices[0].message.content
+                    st.markdown(answer)
+                    st.session_state.messages.append({"role": "assistant", "content": answer})
+
+                except Exception as e:
+                    err = str(e)
+                    if "api_key" in err.lower() or "authentication" in err.lower() or "401" in err:
+                        st.error("API Key가 올바르지 않습니다. 사이드바에서 다시 확인해주세요.")
+                    else:
+                        st.error(f"오류가 발생했습니다: {err}")
 
 st.caption("※ 본 대시보드는 투자 권유가 아닙니다. 투자 판단은 본인 책임하에 하시기 바랍니다.")
